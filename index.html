@@ -1167,7 +1167,12 @@ function loadSavedDraft() {
     if (d.mRatio) st.mRatio = d.mRatio;
     if (d.mAnim) st.mAnim = d.mAnim;
     if (d.mEffect) st.mEffect = d.mEffect;
-    if (d.cs) Object.assign(cs, d.cs);
+    if (d.cs) {
+      const { pat, border, ...restCs } = d.cs;
+      Object.assign(cs, restCs);
+      if (pat) Object.assign(cs.pat, pat);
+      if (border) Object.assign(cs.border, border);
+    }
     if (!Array.isArray(cs.stickers)) cs.stickers = [];
     if (d.elState) Object.assign(elState, d.elState);
     return true;
@@ -2867,7 +2872,7 @@ function initSplash() {
   mottoEl.innerHTML = words.map(([w, accent], i) => `<span class="mw${accent ? " accent" : ""}" style="--wd:${(0.85 + i * 0.07).toFixed(2)}s">${w}</span>`).join(" ");
 
   const ctx = cv.getContext("2d");
-  let W = 0, H = 0, raf = 0, closed = false;
+  let W = 0, H = 0, raf = 0, closed = false, autoTimer = 0, paintedAt = 0;
   const particles = Array.from({ length: 48 }, (_, i) => ({
     x: Math.random(), y: Math.random(), r: 1 + Math.random() * 2.2,
     vy: 0.02 + Math.random() * 0.04, vx: (Math.random() - 0.5) * 0.015,
@@ -2895,17 +2900,34 @@ function initSplash() {
   }
   raf = requestAnimationFrame(tick);
 
+  function onKey(e) {
+    if (e.key === "Escape") enterApp();
+  }
   function enterApp() {
     if (closed) return;
     closed = true;
+    clearTimeout(autoTimer);
     cancelAnimationFrame(raf);
     window.removeEventListener("resize", resize);
+    document.removeEventListener("keydown", onKey);
     splash.classList.add("out");
     setTimeout(() => { splash.hidden = true; }, 650);
   }
+
   skipBtn.onclick = e => { e.stopPropagation(); enterApp(); };
-  splash.addEventListener("click", enterApp);
-  setTimeout(enterApp, 2200);
+  splash.addEventListener("click", () => {
+    if (paintedAt && performance.now() - paintedAt >= 900) enterApp();
+  });
+  document.addEventListener("keydown", onKey);
+
+  // Start auto-dismiss timer only after the splash has actually painted so slow loads never cut off the intro
+  const reducedMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const displayMs = reducedMotion ? 1600 : 3200;
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    if (closed) return;
+    paintedAt = performance.now();
+    autoTimer = setTimeout(enterApp, displayMs);
+  }));
 }
 
 function init() {
